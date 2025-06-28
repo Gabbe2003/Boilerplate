@@ -352,7 +352,7 @@ function ypseo_admin_page() {
     <form method="post"><?php wp_nonce_field( 'ypseo_sync' ); ?>
         <table class="form-table">
             <tr><th>From</th>
-                <td><input type="date" name="from" value="<?php echo esc_attr($_POST['from'] ?? gmdate('Y-m-d', strtotime('-4 days'))); ?>" /></td></tr>
+                <td><input type="date" name="from" value="<?php echo esc_attr($_POST['from'] ?? gmdate('Y-m-d', strtotime('-30 days'))); ?>" /></td></tr>
             <tr><th>To</th>
                 <td><input type="date" name="to" value="<?php echo esc_attr($_POST['to'] ?? gmdate('Y-m-d', strtotime('-1 day'))); ?>" /></td></tr>
             <tr><th>Ignore daily lock</th>
@@ -377,16 +377,43 @@ function ypseo_admin_page() {
         </tbody></table>
     <?php endif; ?>
 
-    <h2>Daily Logs</h2>
-    <table class="widefat striped"><thead><tr><th>Date</th><th>Entries</th></tr></thead><tbody>
-        <?php foreach( ypseo_get_logs() as $date => $entries ) : ?>
+      <h2>Daily Logs</h2>
+        <table class="widefat striped"><thead><tr><th>Date</th><th>Entries</th><th>Actions</th></tr></thead><tbody>
+        <?php foreach( $daily_logs as $date => $entries ) :
+            $view_url   = add_query_arg( [ 'view_date' => $date ], menu_page_url( 'ypseo-sync', false ) );
+            $delete_url = wp_nonce_url( add_query_arg( [ 'ypseo_action' => 'delete_logs', 'date' => $date ] ), 'ypseo_delete_logs' );
+        ?>
             <tr>
-                <td><?php echo esc_html($date); ?></td>
-                <td><?php echo esc_html(count($entries)); ?></td>
+                <td><?php echo esc_html( $date ); ?></td>
+                <td><?php echo esc_html( count( $entries ) ); ?></td>
+                <td>
+                    <a href="<?php echo esc_url( $view_url ); ?>">View</a> |
+                    <a href="<?php echo esc_url( $delete_url ); ?>" onclick="return confirm('Delete all logs for <?php echo esc_js( $date ); ?>?');">Delete</a>
+                </td>
             </tr>
         <?php endforeach; ?>
-    </tbody></table>
+        </tbody></table>
 
-</div>
-<?php
+        <?php if ( isset( $_GET['view_date'] ) && isset( $daily_logs[ $_GET['view_date'] ] ) ) :
+            $vd = sanitize_text_field( $_GET['view_date'] );
+            echo '<h2>Log Details for ' . esc_html( $vd ) . '</h2>';
+            echo '<a href="' . esc_url( menu_page_url( 'ypseo-sync', false ) ) . '">&larr; Back to logs</a>';
+            echo '<table class="widefat striped"><thead><tr>' .
+                 '<th>Time</th><th>Post ID</th><th>Title</th><th>Keyword</th><th>Attachment ID</th><th>Status</th><th>URL/Error</th>' .
+                 '</tr></thead><tbody>';
+            foreach ( $daily_logs[ $vd ] as $entry ) {
+                echo '<tr>' .
+                     '<td>' . esc_html( $entry['timestamp'] ) . '</td>' .
+                     '<td>' . esc_html( $entry['post_id'] ) . '</td>' .
+                     '<td>' . esc_html( $entry['title'] ) . '</td>' .
+                     '<td>' . esc_html( $entry['keyword'] ) . '</td>' .
+                     '<td>' . esc_html( $entry['attachment_id'] ) . '</td>' .
+                     '<td>' . esc_html( $entry['status'] ) . '</td>' .
+                     '<td>' . esc_html( $entry['url'] ? $entry['url'] : $entry['error'] ) . '</td>' .
+                     '</tr>';
+            }
+            echo '</tbody></table>';
+        endif;
+
+    ?></div><?php
 }
