@@ -187,3 +187,51 @@ function hpv_get_top_posts_by_week($reference_date = null, $limit = 5) {
 
     return $results;
 }
+
+
+function hpv_get_top_viewed_posts($period = 'day', $limit = 6) {
+    global $wpdb;
+
+    $now = current_time('mysql');
+    $table = $wpdb->prefix . 'post_view_logs';
+
+    // Set start date based on period
+    switch ($period) {
+        case 'day':
+            $start = date('Y-m-d 00:00:00', strtotime('today'));
+            break;
+        case 'week':
+            $start = date('Y-m-d 00:00:00', strtotime('monday this week'));
+            break;
+        case 'month':
+            $start = date('Y-m-01 00:00:00');
+            break;
+        default:
+            return []; // Invalid
+    }
+
+    // Get most viewed post IDs
+    $results = $wpdb->get_results($wpdb->prepare("
+        SELECT post_id, COUNT(*) as views
+        FROM $table
+        WHERE view_date BETWEEN %s AND %s
+        GROUP BY post_id
+        ORDER BY views DESC
+        LIMIT %d
+    ", $start, $now, $limit), ARRAY_A);
+
+    if (!$results) return [];
+
+    // Fetch actual posts
+    $post_ids = wp_list_pluck($results, 'post_id');
+
+    $posts = get_posts([
+        'post__in' => $post_ids,
+        'orderby' => 'post__in',
+        'post_type' => 'post',
+        'post_status' => 'publish',
+        'numberposts' => $limit,
+    ]);
+
+    return $posts;
+}

@@ -1,67 +1,109 @@
 <?php
-
 function hpv_render_dashboard_page() {
-    // === Get selected week ===
-    $selected_week = $_GET['hpv_week'] ?? 'this_week';
+    global $wpdb;
 
-    $reference_date = match($selected_week) {
-        'last_week' => date('Y-m-d', strtotime('-7 days')),
-        '2_weeks_ago' => date('Y-m-d', strtotime('-14 days')),
-        default => current_time('Y-m-d'),
-    };
+    // === Determine range ===
+    $range = $_GET['hpv_range'] ?? 'week';
+    $table = $wpdb->prefix . 'post_view_logs';
 
-    // === Weekly views graph data ===
-    $weekly_views = hpv_get_views_by_week($reference_date);
-    $labels = json_encode(array_keys($weekly_views));
-    $data = json_encode(array_values($weekly_views));
+    // === Get data by range ===
+    switch ($range) {
+        case 'day':
+            $results = $wpdb->get_results(
+                $wpdb->prepare("SELECT HOUR(view_date) as label, COUNT(*) as total FROM $table WHERE DATE(view_date) = CURDATE() GROUP BY label ORDER BY label ASC"),
+                ARRAY_A
+            );
+            $labels = range(0, 23);
+            break;
 
-    // === Comparison stats ===
-    $current_total = array_sum(hpv_get_views_by_week(current_time('Y-m-d')));
-    $last_week_total = array_sum(hpv_get_views_by_week(date('Y-m-d', strtotime('-7 days'))));
-    $change = $current_total - $last_week_total;
-    $change_pct = $last_week_total > 0 ? round(($change / $last_week_total) * 100) : 0;
-    $change_direction = $change >= 0 ? '📈 Increase' : '📉 Decrease';
+        case 'month':
+            $results = $wpdb->get_results(
+                $wpdb->prepare("SELECT DAY(view_date) as label, COUNT(*) as total FROM $table WHERE MONTH(view_date) = MONTH(CURDATE()) AND YEAR(view_date) = YEAR(CURDATE()) GROUP BY label ORDER BY label ASC"),
+                ARRAY_A
+            );
+            $labels = range(1, (int) date('t'));
+            break;
 
-    // === Totals & top posts ===
-    $total_views_all_time = hpv_get_total_views_all_time();
-    $top_posts_this_week = hpv_get_top_posts_by_week($reference_date);
+        case 'week':
+        default:
+            $results = $wpdb->get_results(
+                $wpdb->prepare("SELECT DATE(view_date) as label, COUNT(*) as total FROM $table WHERE view_date >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND view_date <= DATE_ADD(CURDATE(), INTERVAL (6 - WEEKDAY(CURDATE())) DAY) GROUP BY label ORDER BY label ASC"),
+                ARRAY_A
+            );
+            $labels = [];
+            for ($i = 0; $i < 7; $i++) {
+                $labels[] = date('Y-m-d', strtotime("monday this week +{$i} days"));
+            }
+            break;
+    }
+
+    // === Map data ===
+    $data_map = array_column($results, 'total', 'label');
+    $data = [];
+    foreach ($labels as $label) {
+        $key = (string) $label;
+        $data[] = isset($data_map[$key]) ? (int) $data_map[$key] : 0;
+    }
+
+    // === Trend Comparison ===
+    $current_total = array_sum($data);
+    $prev_start = $prev_end = null;
+
+    if ($range === 'day') {
+        $prev_start = date('Y-m-d 00:00:00', strtotime('-1 day'));
+        $prev_end   = date('Y-m-d 23:59:59', strtotime('-1 day'));
+    } elseif ($range === 'week') {
+        $prev_start = date('Y-m-d 00:00:00', strtotime('monday last week'));
+        $prev_end   = date('Y-m-d 23:59:59', strtotime('sunday last week'));
+    } elseif ($range === 'month') {
+        $prev_start = date('Y-m-01 00:00:00', strtotime('first day of last month'));
+        $prev_end   = date('Y-m-t 23:59:59', strtotime('last day of last month'));
+    }
+
+    $prev_total = 0;
+    if ($prev_start && $prev_end) {
+        $prev_results = $wpdb->get_var(
+            $wpdb->prepare("SELECT COUNT(*) FROM $table WHERE view_date BETWEEN %s AND %s", $prev_start, $prev_end)
+        );
+        $prev_total = (int) $prev_results;
+    }
+
+    $diff = $current_total - $prev_total;
+    $percent = $prev_total > 0 ? round(($diff / $prev_total) * 100) : 0;
+    $trend_icon = $diff >= 0 ? '📈' : '📉';
+    $trend_color = $diff >= 0 ? 'green' : 'red';
+    $trend_text = $prev_total > 0
+        ? "$trend_icon <span style='color:$trend_color'>" . abs($percent) . "%</span> vs previous $range"
+        : "No data for previous $range.";
     ?>
 
     <div class="wrap">
         <h1>📊 Post Views Dashboard</h1>
 
-        <!-- Total Views Box -->
-        <div style="background: #fff; padding: 16px; margin: 16px 0; border-left: 4px solid #0073aa;">
-            <strong>📦 Total Views (All Time):</strong> <?php echo number_format($total_views_all_time); ?>
-        </div>
-
-        <!-- Week Filter -->
+        <!-- Range Filter -->
         <form method="get" style="margin-bottom: 20px;">
             <input type="hidden" name="page" value="post-views-dashboard">
-            <label for="hpv_week"><strong>View week:</strong></label>
-            <select name="hpv_week" id="hpv_week" onchange="this.form.submit()">
-                <option value="this_week" <?php selected($selected_week, 'this_week'); ?>>This Week</option>
-                <option value="last_week" <?php selected($selected_week, 'last_week'); ?>>Last Week</option>
-                <option value="2_weeks_ago" <?php selected($selected_week, '2_weeks_ago'); ?>>2 Weeks Ago</option>
+            <label for="hpv_range"><strong>Select Range:</strong></label>
+            <select name="hpv_range" id="hpv_range" onchange="this.form.submit()">
+                <option value="day" <?php selected($range, 'day'); ?>>Today</option>
+                <option value="week" <?php selected($range, 'week'); ?>>This Week</option>
+                <option value="month" <?php selected($range, 'month'); ?>>This Month</option>
             </select>
         </form>
 
         <!-- Chart -->
-        <canvas id="weeklyViewsChart" style="max-width: 800px; max-height: 300px;"></canvas>
-
+        <canvas id="viewsChart" style="max-width: 800px; max-height: 300px;"></canvas>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const ctx = document.getElementById('weeklyViewsChart').getContext('2d');
-
-            window.chart = new Chart(ctx, {
+            const ctx = document.getElementById('viewsChart').getContext('2d');
+            new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: <?php echo $labels; ?>,
+                    labels: <?php echo json_encode($labels); ?>,
                     datasets: [{
-                        label: 'Views',
-                        data: <?php echo $data; ?>,
-                        backgroundColor: '#0073aa',
+                        label: 'Views (<?php echo ucfirst($range); ?>)',
+                        data: <?php echo json_encode($data); ?>,
+                        backgroundColor: '#0073aa'
                     }]
                 },
                 options: {
@@ -75,42 +117,13 @@ function hpv_render_dashboard_page() {
                     }
                 }
             });
-        });
         </script>
 
-        <!-- Comparison Summary -->
+        <!-- Trend Summary -->
         <div style="margin-top: 20px; font-size: 16px;">
-            <strong>📊 This Week:</strong> <?php echo $current_total; ?> views<br>
-            <strong>📅 Last Week:</strong> <?php echo $last_week_total; ?> views<br>
-            <strong><?php echo $change_direction; ?>:</strong> <?php echo abs($change); ?> views (<?php echo $change_pct; ?>%)
+            <strong>🔁 Trend:</strong> <?php echo $trend_text; ?>
         </div>
-
-        <!-- Top Posts This Week -->
-        <h2 style="margin-top: 40px;">🏆 Top Posts This Week</h2>
-        <table class="wp-list-table widefat fixed striped">
-            <thead>
-                <tr>
-                    <th>Post Title</th>
-                    <th>Views</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if ($top_posts_this_week): ?>
-                    <?php foreach ($top_posts_this_week as $item): ?>
-                        <tr>
-                            <td>
-                                <a href="<?php echo get_edit_post_link($item['post_id']); ?>">
-                                    <?php echo get_the_title($item['post_id']); ?>
-                                </a>
-                            </td>
-                            <td><?php echo $item['views']; ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr><td colspan="2">No views recorded for this week.</td></tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
     </div>
-    <?php
+<?php
 }
+
