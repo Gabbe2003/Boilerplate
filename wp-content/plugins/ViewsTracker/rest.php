@@ -1,5 +1,6 @@
 <?php
 
+// === Log View Endpoint ===
 add_action('rest_api_init', function () {
     register_rest_route('hpv/v1', '/log-view/(?P<id>\d+)', [
         'methods'  => 'POST',
@@ -13,8 +14,8 @@ if (!function_exists('hpv_rest_log_post_view')) {
         global $wpdb;
 
         $post_id = (int) $request['id'];
-
         $post = get_post($post_id);
+
         if (!$post || $post->post_status !== 'publish') {
             return new WP_Error('invalid_post', 'Post not found', ['status' => 404]);
         }
@@ -26,12 +27,12 @@ if (!function_exists('hpv_rest_log_post_view')) {
             return new WP_REST_Response(['message' => 'Already logged recently'], 400);
         }
 
-        // Prevents duplicate views from the same IP/post combo for 6 hours
+        // Save view
         set_transient($transient_key, true, 3 * HOUR_IN_SECONDS);
-
         $views = (int) get_post_meta($post_id, 'post_views', true);
         update_post_meta($post_id, 'post_views', $views + 1);
 
+        // Log view in custom table
         $table = $wpdb->prefix . 'post_view_logs';
         $wpdb->insert($table, [
             'post_id'   => $post_id,
@@ -41,12 +42,11 @@ if (!function_exists('hpv_rest_log_post_view')) {
         return new WP_REST_Response([
             'success' => true,
             'post_id' => $post_id,
-            'views'   => $views + 1,
         ], 200);
     }
 }
 
-
+// === Top Posts Endpoint ===
 add_action('rest_api_init', function () {
     register_rest_route('hpv/v1', '/top-posts', [
         'methods'  => 'GET',
@@ -74,8 +74,32 @@ function hpv_rest_get_top_posts($request) {
         return [
             'id' => $post->ID,
             'title' => get_the_title($post),
+            'slug' => $post->post_name,
             'link' => get_permalink($post),
-            'views' => get_post_meta($post->ID, 'post_views', true),
+            'featured_image' => get_the_post_thumbnail_url($post->ID, 'medium'),
+            'publish_date' => get_the_date('c', $post),
+            'author_name' => get_the_author_meta('display_name', $post->post_author),
+            'categories' => wp_get_post_terms($post->ID, 'category', ['fields' => 'names']),
         ];
     }, $posts));
+}
+
+// === Customize Default /wp/v2/posts Output ===
+add_filter('rest_prepare_post', 'hpv_customize_rest_post_response', 10, 3);
+
+function hpv_customize_rest_post_response($response, $post, $request) {
+    if ($request->get_route() !== '/wp/v2/posts' && strpos($request->get_route(), '/wp/v2/posts?') !== 0) {
+        return $response;
+    }
+
+    $custom_data = [
+        'title'          => get_the_title($post),
+        'slug'           => $post->post_name,
+        'featured_image' => get_the_post_thumbnail_url($post->ID, 'medium'),
+        'publish_date'   => get_the_date('c', $post),
+        'author_name'    => get_the_author_meta('display_name', $post->post_author),
+        'categories'     => wp_get_post_terms($post->ID, 'category', ['fields' => 'names']),
+    ];
+
+    return rest_ensure_response($custom_data);
 }
