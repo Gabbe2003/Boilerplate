@@ -4,7 +4,7 @@ Tags: backup, transfer, copy, move, clone
 Requires at least: 3.3
 Tested up to: 6.8
 Requires PHP: 5.3
-Stable tag: 7.95
+Stable tag: 7.96
 License: GPLv3 or later
 
 Trusted by 60M+ sites: The gold standard for WordPress migrations, backups, and site transfers since 2013.
@@ -93,6 +93,8 @@ The plugin comes preinstalled on all Bitnami WordPress sites running on AWS, Goo
 
 [youtube http://www.youtube.com/watch?v=BpWxCeUWBOk]
 
+[youtube http://www.youtube.com/watch?v=mRp7qTFYKgs]
+
 == Installation ==
 1. All-in-One WP Migration can be installed directly through your WordPress Plugins dashboard.
 1. Click "Add New" and Search for "All-in-One WP Migration"
@@ -111,6 +113,11 @@ All-in-One WP Migration is in full compliance with General Data Protection Regul
 See our [GDPR Compliant Privacy Policy here](https://www.iubenda.com/privacy-policy/946881).
 
 == Changelog ==
+= 7.96 =
+**Added**
+
+* Admin notice warning when AUTO_INCREMENT is missing on wp_options table
+
 = 7.95 =
 **Added**
 

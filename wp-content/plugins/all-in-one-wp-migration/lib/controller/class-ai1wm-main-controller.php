@@ -74,46 +74,23 @@ class Ai1wm_Main_Controller {
 	 * @return void
 	 */
 	private function activate_actions() {
-		// Init
+		// Load core functionality
+		add_action( 'admin_head', array( $this, 'admin_head' ) );
 		add_action( 'admin_init', array( $this, 'init' ) );
-
-		// Router
 		add_action( 'admin_init', array( $this, 'router' ) );
-
-		// Enable WP importing
 		add_action( 'admin_init', array( $this, 'wp_importing' ), 5 );
-
-		// Setup backups folder
 		add_action( 'admin_init', array( $this, 'setup_backups_folder' ) );
-
-		// Setup storage folder
 		add_action( 'admin_init', array( $this, 'setup_storage_folder' ) );
-
-		// Setup secret key
 		add_action( 'admin_init', array( $this, 'setup_secret_key' ) );
-
-		// Check user role capability
+		add_action( 'admin_init', array( $this, 'check_auto_increment' ) );
 		add_action( 'admin_init', array( $this, 'check_user_role_capability' ) );
-
-		// Schedule crons
 		add_action( 'admin_init', array( $this, 'schedule_crons' ) );
-
-		// Load text domain
 		add_action( 'admin_init', array( $this, 'load_textdomain' ) );
 
-		// Admin header
-		add_action( 'admin_head', array( $this, 'admin_head' ) );
-
-		// All-in-One WP Migration
+		// Load commands and buttons
 		add_action( 'plugins_loaded', array( $this, 'ai1wm_loaded' ), 10 );
-
-		// Export and import commands
 		add_action( 'plugins_loaded', array( $this, 'ai1wm_commands' ), 10 );
-
-		// Export and import buttons
 		add_action( 'plugins_loaded', array( $this, 'ai1wm_buttons' ), 10 );
-
-		// WP CLI commands
 		add_action( 'plugins_loaded', array( $this, 'wp_cli' ), 10 );
 
 		// Register scripts and styles
@@ -308,6 +285,24 @@ class Ai1wm_Main_Controller {
 	public function setup_secret_key() {
 		if ( ! get_option( AI1WM_SECRET_KEY ) ) {
 			update_option( AI1WM_SECRET_KEY, ai1wm_generate_random_string( 12 ) );
+		}
+	}
+
+	/**
+	 * Check auto increment
+	 *
+	 * @return void
+	 */
+	public function check_auto_increment() {
+		global $wpdb;
+
+		$db_client = Ai1wm_Database_Utility::create_client();
+		if ( ! $db_client->has_auto_increment( $wpdb->options ) ) {
+			if ( is_multisite() ) {
+				return add_action( 'network_admin_notices', array( $this, 'missing_auto_increment' ) );
+			} else {
+				return add_action( 'admin_notices', array( $this, 'missing_auto_increment' ) );
+			}
 		}
 	}
 
@@ -598,6 +593,15 @@ class Ai1wm_Main_Controller {
 	 */
 	public function wordpress_htaccess_notice() {
 		Ai1wm_Template::render( 'main/wordpress-htaccess-notice' );
+	}
+
+	/**
+	 * Display notice for missing auto increment
+	 *
+	 * @return void
+	 */
+	public function missing_auto_increment() {
+		Ai1wm_Template::render( 'main/missing-auto-increment' );
 	}
 
 	/**
