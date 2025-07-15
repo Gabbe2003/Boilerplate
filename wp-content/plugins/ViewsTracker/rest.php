@@ -3,14 +3,15 @@
 // === Log View Endpoint ===
 add_action('rest_api_init', function () {
     register_rest_route('hpv/v1', '/log-view/(?P<id>\d+)', [
-        'methods'  => 'POST',
+        'methods' => 'POST',
         'callback' => 'hpv_rest_log_post_view',
         'permission_callback' => '__return_true',
     ]);
 });
 
 if (!function_exists('hpv_rest_log_post_view')) {
-    function hpv_rest_log_post_view($request) {
+    function hpv_rest_log_post_view($request)
+    {
         global $wpdb;
 
         $post_id = (int) $request['id'];
@@ -35,7 +36,7 @@ if (!function_exists('hpv_rest_log_post_view')) {
         // Log view in custom table
         $table = $wpdb->prefix . 'post_view_logs';
         $wpdb->insert($table, [
-            'post_id'   => $post_id,
+            'post_id' => $post_id,
             'view_date' => current_time('mysql'),
         ]);
 
@@ -49,13 +50,14 @@ if (!function_exists('hpv_rest_log_post_view')) {
 // === Top Posts Endpoint ===
 add_action('rest_api_init', function () {
     register_rest_route('hpv/v1', '/top-posts', [
-        'methods'  => 'GET',
+        'methods' => 'GET',
         'callback' => 'hpv_rest_get_top_posts',
         'permission_callback' => '__return_true',
     ]);
 });
 
-function hpv_rest_get_top_posts($request) {
+function hpv_rest_get_top_posts($request)
+{
     $period = $request->get_param('period') ?: 'day';
 
     $limits = [
@@ -77,7 +79,7 @@ function hpv_rest_get_top_posts($request) {
             'slug' => $post->post_name,
             'link' => get_permalink($post),
             'featured_image' => get_the_post_thumbnail_url($post->ID, 'medium'),
-            'publish_date' => get_the_date('c', $post),
+            'date' => get_the_date('c', $post),
             'author_name' => get_the_author_meta('display_name', $post->post_author),
             'categories' => wp_get_post_terms($post->ID, 'category', ['fields' => 'names']),
         ];
@@ -87,18 +89,19 @@ function hpv_rest_get_top_posts($request) {
 // === Customize Default /wp/v2/posts Output ===
 add_filter('rest_prepare_post', 'hpv_customize_rest_post_response', 10, 3);
 
-function hpv_customize_rest_post_response($response, $post, $request) {
+function hpv_customize_rest_post_response($response, $post, $request)
+{
     if ($request->get_route() !== '/wp/v2/posts' && strpos($request->get_route(), '/wp/v2/posts?') !== 0) {
         return $response;
     }
 
     $custom_data = [
-        'title'          => get_the_title($post),
-        'slug'           => $post->post_name,
+        'title' => get_the_title($post),
+        'slug' => $post->post_name,
         'featured_image' => get_the_post_thumbnail_url($post->ID, 'medium'),
-        'publish_date'   => get_the_date('c', $post),
-        'author_name'    => get_the_author_meta('display_name', $post->post_author),
-        'categories'     => wp_get_post_terms($post->ID, 'category', ['fields' => 'names']),
+        'date' => get_the_date('c', $post),
+        'author_name' => get_the_author_meta('display_name', $post->post_author),
+        'categories' => wp_get_post_terms($post->ID, 'category', ['fields' => 'names']),
     ];
 
     return rest_ensure_response($custom_data);
