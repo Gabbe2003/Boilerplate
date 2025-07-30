@@ -82,6 +82,8 @@ function hpv_rest_get_top_posts($request)
             'date' => get_the_date('c', $post),
             'author_name' => get_the_author_meta('display_name', $post->post_author),
             'categories' => wp_get_post_terms($post->ID, 'category', ['fields' => 'names']),
+            'excerpt' => get_the_excerpt($post),
+
         ];
     }, $posts));
 }
@@ -102,6 +104,7 @@ function hpv_customize_rest_post_response($response, $post, $request)
         'date' => get_the_date('c', $post),
         'author_name' => get_the_author_meta('display_name', $post->post_author),
         'categories' => wp_get_post_terms($post->ID, 'category', ['fields' => 'names']),
+        'excerpt' => get_the_excerpt($post), // <-- added!
     ];
 
     return rest_ensure_response($custom_data);
