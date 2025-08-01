@@ -72,18 +72,71 @@ function hpv_rest_get_top_posts($request)
 
     $posts = hpv_get_top_viewed_posts($period, $limits[$period]);
 
+    // --- Structure output for frontend Post interface ---
     return rest_ensure_response(array_map(function ($post) {
-        return [
-            'id' => $post->ID,
-            'title' => get_the_title($post),
-            'slug' => $post->post_name,
-            'link' => get_permalink($post),
-            'featured_image' => get_the_post_thumbnail_url($post->ID, 'medium'),
-            'date' => get_the_date('c', $post),
-            'author_name' => get_the_author_meta('display_name', $post->post_author),
-            'categories' => wp_get_post_terms($post->ID, 'category', ['fields' => 'names']),
-            'excerpt' => get_the_excerpt($post),
+        // Featured Image
+        $thumbnail_id = get_post_thumbnail_id($post->ID);
+        $featured_image_url = get_the_post_thumbnail_url($post->ID, 'medium');
+        $featured_image = $thumbnail_id ? [
+            'node' => [
+                'id' => $thumbnail_id,
+                'sourceUrl' => $featured_image_url,
+                'altText' => get_post_meta($thumbnail_id, '_wp_attachment_image_alt', true),
+            ]
+        ] : null;
 
+        // Author
+        $author_id = $post->post_author;
+        $author = $author_id ? [
+            'node' => [
+                'id' => $author_id,
+                'name' => get_the_author_meta('display_name', $author_id),
+                'slug' => get_the_author_meta('user_nicename', $author_id),
+            ]
+        ] : null;
+
+        // Categories
+        $category_terms = wp_get_post_terms($post->ID, 'category', ['fields' => 'all']);
+        $categories = [
+            'nodes' => array_map(function ($term) {
+                return [
+                    'id' => $term->term_id,
+                    'name' => $term->name,
+                    'slug' => $term->slug,
+                ];
+            }, $category_terms)
+        ];
+
+        // Tags
+        $tag_terms = wp_get_post_terms($post->ID, 'post_tag', ['fields' => 'all']);
+        $tags = [
+            'nodes' => array_map(function ($term) {
+                return [
+                    'id' => $term->term_id,
+                    'name' => $term->name,
+                    'slug' => $term->slug,
+                ];
+            }, $tag_terms)
+        ];
+
+        return [
+            'id' => (string) $post->ID,
+            'databaseId' => (int) $post->ID,
+            'slug' => $post->post_name,
+            'uri' => get_permalink($post),
+            'status' => $post->post_status,
+            'author_name' => get_the_author_meta('display_name', $author_id),
+            'category' => isset($category_terms[0]) ? $category_terms[0]->name : null,
+            'title' => get_the_title($post),
+            'excerpt' => get_the_excerpt($post),
+            'date' => get_the_date('c', $post),
+            'commentCount' => (int) $post->comment_count,
+            'featuredImage' => $featured_image,
+            'author' => $author,
+            'categories' => $categories,
+            'tags' => $tags,
+            // 'comments' => [...], // Optional: implement comments if needed
+            // 'seo' => [...], // Optional: implement SEO if needed
         ];
     }, $posts));
 }
@@ -97,14 +150,63 @@ function hpv_customize_rest_post_response($response, $post, $request)
         return $response;
     }
 
+    $thumbnail_id = get_post_thumbnail_id($post->ID);
+    $featured_image_url = get_the_post_thumbnail_url($post->ID, 'medium');
+    $featured_image = $thumbnail_id ? [
+        'node' => [
+            'id' => $thumbnail_id,
+            'sourceUrl' => $featured_image_url,
+            'altText' => get_post_meta($thumbnail_id, '_wp_attachment_image_alt', true),
+        ]
+    ] : null;
+
+    $author_id = $post->post_author;
+    $author = $author_id ? [
+        'node' => [
+            'id' => $author_id,
+            'name' => get_the_author_meta('display_name', $author_id),
+            'slug' => get_the_author_meta('user_nicename', $author_id),
+        ]
+    ] : null;
+
+    $category_terms = wp_get_post_terms($post->ID, 'category', ['fields' => 'all']);
+    $categories = [
+        'nodes' => array_map(function ($term) {
+            return [
+                'id' => $term->term_id,
+                'name' => $term->name,
+                'slug' => $term->slug,
+            ];
+        }, $category_terms)
+    ];
+
+    $tag_terms = wp_get_post_terms($post->ID, 'post_tag', ['fields' => 'all']);
+    $tags = [
+        'nodes' => array_map(function ($term) {
+            return [
+                'id' => $term->term_id,
+                'name' => $term->name,
+                'slug' => $term->slug,
+            ];
+        }, $tag_terms)
+    ];
+
     $custom_data = [
-        'title' => get_the_title($post),
+        'id' => (string) $post->ID,
+        'databaseId' => (int) $post->ID,
         'slug' => $post->post_name,
-        'featured_image' => get_the_post_thumbnail_url($post->ID, 'medium'),
+        'uri' => get_permalink($post),
+        'status' => $post->post_status,
+        'author_name' => get_the_author_meta('display_name', $author_id),
+        'category' => isset($category_terms[0]) ? $category_terms[0]->name : null,
+        'title' => get_the_title($post),
+        'excerpt' => get_the_excerpt($post),
         'date' => get_the_date('c', $post),
-        'author_name' => get_the_author_meta('display_name', $post->post_author),
-        'categories' => wp_get_post_terms($post->ID, 'category', ['fields' => 'names']),
-        'excerpt' => get_the_excerpt($post), // <-- added!
+        'commentCount' => (int) $post->comment_count,
+        'featuredImage' => $featured_image,
+        'author' => $author,
+        'categories' => $categories,
+        'tags' => $tags,
     ];
 
     return rest_ensure_response($custom_data);
