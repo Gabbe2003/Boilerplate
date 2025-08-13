@@ -1,6 +1,21 @@
 <?php
+/**
+ * Plugin Name: HPV Post Views API
+ * Description: REST endpoints for logging post views, fetching top posts, customizing /wp/v2/posts, and fetching today's posts.
+ * Version:     1.0.0
+ * Author:      You
+ * License:     GPL-2.0+
+ */
 
-// === Log View Endpoint ===
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
+ * ============================================================
+ * === Log View Endpoint ======================================
+ * ============================================================
+ */
 add_action('rest_api_init', function () {
     register_rest_route('hpv/v1', '/log-view/(?P<id>\d+)', [
         'methods' => 'POST',
@@ -28,7 +43,7 @@ if (!function_exists('hpv_rest_log_post_view')) {
             return new WP_REST_Response(['message' => 'Already logged recently'], 400);
         }
 
-        // Save view
+        // Save view (debounced for 3 hours per IP/post)
         set_transient($transient_key, true, 3 * HOUR_IN_SECONDS);
         $views = (int) get_post_meta($post_id, 'post_views', true);
         update_post_meta($post_id, 'post_views', $views + 1);
@@ -47,7 +62,11 @@ if (!function_exists('hpv_rest_log_post_view')) {
     }
 }
 
-// === Top Posts Endpoint ===
+/**
+ * ============================================================
+ * === Top Posts Endpoint =====================================
+ * ============================================================
+ */
 add_action('rest_api_init', function () {
     register_rest_route('hpv/v1', '/top-posts', [
         'methods' => 'GET',
@@ -61,7 +80,7 @@ function hpv_rest_get_top_posts($request)
     $period = $request->get_param('period') ?: 'day';
 
     $limits = [
-        'day' => 6,
+        'day' => 10,
         'week' => 12,
         'month' => 24,
     ];
@@ -70,6 +89,8 @@ function hpv_rest_get_top_posts($request)
         return new WP_Error('invalid_period', 'Invalid period parameter', ['status' => 400]);
     }
 
+    // Expecting your existing helper:
+    // hpv_get_top_viewed_posts($period, $limit) -> returns array of WP_Post objects
     $posts = hpv_get_top_viewed_posts($period, $limits[$period]);
 
     // --- Structure output for frontend Post interface ---
@@ -135,13 +156,17 @@ function hpv_rest_get_top_posts($request)
             'author' => $author,
             'categories' => $categories,
             'tags' => $tags,
-            // 'comments' => [...], // Optional: implement comments if needed
-            // 'seo' => [...], // Optional: implement SEO if needed
+            // 'comments' => [...], // Optional
+            // 'seo'      => [...], // Optional
         ];
     }, $posts));
 }
 
-// === Customize Default /wp/v2/posts Output ===
+/**
+ * ============================================================
+ * === Customize Default /wp/v2/posts Output ==================
+ * ============================================================
+ */
 add_filter('rest_prepare_post', 'hpv_customize_rest_post_response', 10, 3);
 
 function hpv_customize_rest_post_response($response, $post, $request)
@@ -210,4 +235,108 @@ function hpv_customize_rest_post_response($response, $post, $request)
     ];
 
     return rest_ensure_response($custom_data);
+}
+
+/**
+ * ============================================================
+ * === NEW: Today’s Posts Endpoint ============================
+ * ============================================================
+ * Keeps all existing code and adds /hpv/v1/today-posts which
+ * returns only posts published today, using the WP timezone.
+ */
+add_action('rest_api_init', function () {
+    register_rest_route('hpv/v1', '/today-posts', [
+        'methods' => 'GET',
+        'callback' => 'hpv_rest_get_today_posts',
+        'permission_callback' => '__return_true',
+    ]);
+});
+
+if (!function_exists('hpv_rest_get_today_posts')) {
+    function hpv_rest_get_today_posts($request)
+    {
+        // Get today's date (site timezone)
+        $today = current_time('Y-m-d');
+
+        $args = [
+            'post_type' => 'post',
+            'post_status' => 'publish',
+            'date_query' => [
+                [
+                    'after' => $today . ' 00:00:00',
+                    'before' => $today . ' 23:59:59',
+                    'inclusive' => true,
+                ],
+            ],
+            'orderby' => 'date',
+            'order' => 'DESC',
+            'posts_per_page' => -1,
+        ];
+
+        $posts = get_posts($args);
+
+        // Reuse same response structure as top-posts for consistency
+        $data = array_map(function ($post) {
+            $thumbnail_id = get_post_thumbnail_id($post->ID);
+            $featured_image_url = get_the_post_thumbnail_url($post->ID, 'medium');
+            $featured_image = $thumbnail_id ? [
+                'node' => [
+                    'id' => $thumbnail_id,
+                    'sourceUrl' => $featured_image_url,
+                    'altText' => get_post_meta($thumbnail_id, '_wp_attachment_image_alt', true),
+                ]
+            ] : null;
+
+            $author_id = $post->post_author;
+            $author = $author_id ? [
+                'node' => [
+                    'id' => $author_id,
+                    'name' => get_the_author_meta('display_name', $author_id),
+                    'slug' => get_the_author_meta('user_nicename', $author_id),
+                ]
+            ] : null;
+
+            $category_terms = wp_get_post_terms($post->ID, 'category', ['fields' => 'all']);
+            $categories = [
+                'nodes' => array_map(function ($term) {
+                    return [
+                        'id' => $term->term_id,
+                        'name' => $term->name,
+                        'slug' => $term->slug,
+                    ];
+                }, $category_terms)
+            ];
+
+            $tag_terms = wp_get_post_terms($post->ID, 'post_tag', ['fields' => 'all']);
+            $tags = [
+                'nodes' => array_map(function ($term) {
+                    return [
+                        'id' => $term->term_id,
+                        'name' => $term->name,
+                        'slug' => $term->slug,
+                    ];
+                }, $tag_terms)
+            ];
+
+            return [
+                'id' => (string) $post->ID,
+                'databaseId' => (int) $post->ID,
+                'slug' => $post->post_name,
+                'uri' => get_permalink($post),
+                'status' => $post->post_status,
+                'author_name' => get_the_author_meta('display_name', $author_id),
+                'category' => isset($category_terms[0]) ? $category_terms[0]->name : null,
+                'title' => get_the_title($post),
+                'excerpt' => get_the_excerpt($post),
+                'date' => get_the_date('c', $post),
+                'commentCount' => (int) $post->comment_count,
+                'featuredImage' => $featured_image,
+                'author' => $author,
+                'categories' => $categories,
+                'tags' => $tags,
+            ];
+        }, $posts);
+
+        return rest_ensure_response($data);
+    }
 }
