@@ -305,16 +305,7 @@ if (!function_exists('hpv_rest_get_today_posts')) {
                 }, $category_terms)
             ];
 
-            $tag_terms = wp_get_post_terms($post->ID, 'post_tag', ['fields' => 'all']);
-            $tags = [
-                'nodes' => array_map(function ($term) {
-                    return [
-                        'id' => $term->term_id,
-                        'name' => $term->name,
-                        'slug' => $term->slug,
-                    ];
-                }, $tag_terms)
-            ];
+
 
             return [
                 'id' => (string) $post->ID,
@@ -330,7 +321,6 @@ if (!function_exists('hpv_rest_get_today_posts')) {
                 'featuredImage' => $featured_image,
                 'author' => $author,
                 'categories' => $categories,
-                'tags' => $tags,
             ];
         }, $posts);
 
