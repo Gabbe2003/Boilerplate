@@ -25,7 +25,7 @@ class GT_Duplicate_Cleaner_Dashboard {
 
     public function enqueue_assets($hook) {
         if ($hook !== 'dashboard_page_' . self::MENU_SLUG) return;
-        $css = '.gt-dc-wrap{max-width:1200px}.gt-dc-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.gt-dc-card{background:#fff;padding:14px 16px;border:1px solid #dcdcde;border-radius:8px}.gt-dc-card h3{margin:0 0 6px;font-size:13px;color:#3c434a}.gt-dc-card .num{font-size:22px;font-weight:700}.gt-dc-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}.gt-dc-filters input[type=text]{min-width:220px}.gt-dc-table{margin-top:8px}.gt-dc-table td code{background:#f6f7f7;padding:2px 6px;border-radius:4px}.gt-dc-actions{display:flex;gap:8px;align-items:center;margin:10px 0}.gt-dc-badge{display:inline-block;padding:2px 6px;border-radius:999px;font-size:11px;background:#f0f0f1}.gt-dc-badge.pub{background:#dff3e3}.gt-dc-badge.dra{background:#e9eefc}.gt-dc-badge.oth{background:#fef3c7}.gt-dc-help{color:#646970}';
+        $css = '.gt-dc-wrap{max-width:1200px}.gt-dc-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.gt-dc-card{background:#fff;padding:14px 16px;border:1px solid #dcdcde;border-radius:8px}.gt-dc-card h3{margin:0 0 6px;font-size:13px;color:#3c434a}.gt-dc-card .num{font-size:22px;font-weight:700}.gt-dc-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}.gt-dc-filters input[type=text]{min-width:220px}.gt-dc-filters input[type=date]{padding:2px 6px}.gt-dc-table{margin-top:8px}.gt-dc-table td code{background:#f6f7f7;padding:2px 6px;border-radius:4px}.gt-dc-actions{display:flex;gap:8px;align-items:center;margin:10px 0}.gt-dc-badge{display:inline-block;padding:2px 6px;border-radius:999px;font-size:11px;background:#f0f0f1}.gt-dc-badge.pub{background:#dff3e3}.gt-dc-badge.dra{background:#e9eefc}.gt-dc-badge.oth{background:#fef3c7}.gt-dc-help{color:#646970}';
         wp_add_inline_style('common', $css);
     }
 
@@ -47,25 +47,26 @@ class GT_Duplicate_Cleaner_Dashboard {
             wp_die(__('You do not have permission to access this page.', 'gt-dcd'));
         }
 
-        // Filters
-        $post_type  = isset($_GET['post_type']) ? sanitize_key($_GET['post_type']) : '';
-        $status     = isset($_GET['status']) ? sanitize_key($_GET['status']) : '';
-        $age        = isset($_GET['age']) ? intval($_GET['age']) : 0; // days; 0 = all time
-        $s          = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-        $paged      = max(1, isset($_GET['paged']) ? intval($_GET['paged']) : 1);
-        $per_page   = max(1, isset($_GET['per_page']) ? intval($_GET['per_page']) : self::PER_PAGE_DEFAULT);
+        // Filters (post_type/status removed); add custom date range
+        $age      = isset($_GET['age']) ? intval($_GET['age']) : 0; // days; 0 = all time
+        $from_raw = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
+        $to_raw   = isset($_GET['to'])   ? sanitize_text_field(wp_unslash($_GET['to']))   : '';
+        $s        = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $paged    = max(1, isset($_GET['paged']) ? intval($_GET['paged']) : 1);
+        $per_page = max(1, isset($_GET['per_page']) ? intval($_GET['per_page']) : self::PER_PAGE_DEFAULT);
 
-        // Data
-        $types      = $this->get_public_post_types();
-        if ($post_type && !in_array($post_type, $types, true)) { $post_type = ''; }
+        // Validate YYYY-MM-DD format; blank out if invalid
+        $from = (preg_match('/^\d{4}-\d{2}-\d{2}$/', $from_raw)) ? $from_raw : '';
+        $to   = (preg_match('/^\d{4}-\d{2}-\d{2}$/', $to_raw))   ? $to_raw   : '';
 
+        // Build query args (without post_type/status)
         $query_args = [
-            'post_type' => $post_type,
-            'status'    => $status,
-            'age'       => $age,
-            'search'    => $s,
-            'paged'     => $paged,
-            'per_page'  => $per_page,
+            'age'      => $age,
+            'from'     => $from,
+            'to'       => $to,
+            'search'   => $s,
+            'paged'    => $paged,
+            'per_page' => $per_page,
         ];
 
         $totals = $this->get_totals($query_args);
@@ -80,7 +81,6 @@ class GT_Duplicate_Cleaner_Dashboard {
         ?>
         <div class="wrap gt-dc-wrap">
             <h1><?php esc_html_e('Duplicate Cleaner Dashboard', 'gt-dcd'); ?></h1>
-            <p class="gt-dc-help"><?php esc_html_e('Monitor and remove posts whose slugs end with -number (e.g., "-2"). Use filters to narrow results; select rows and bulk move to Trash or permanently delete.', 'gt-dcd'); ?></p>
 
             <div class="gt-dc-kpis">
                 <div class="gt-dc-card"><h3><?php esc_html_e('Total Duplicates', 'gt-dcd'); ?></h3><div class="num"><?php echo esc_html(number_format_i18n($total_count)); ?></div></div>
@@ -91,26 +91,29 @@ class GT_Duplicate_Cleaner_Dashboard {
 
             <form method="get" class="gt-dc-filters">
                 <input type="hidden" name="page" value="<?php echo esc_attr(self::MENU_SLUG); ?>" />
-                <select name="post_type">
-                    <option value=""><?php esc_html_e('All types', 'gt-dcd'); ?></option>
-                    <?php foreach ($types as $t): ?>
-                        <option value="<?php echo esc_attr($t); ?>" <?php selected($t, $post_type); ?>><?php echo esc_html($t); ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <select name="status">
-                    <option value=""><?php esc_html_e('All statuses', 'gt-dcd'); ?></option>
-                    <?php foreach (['publish'=>'publish','draft'=>'draft','pending'=>'pending','future'=>'future','private'=>'private'] as $key=>$label): ?>
-                        <option value="<?php echo esc_attr($key); ?>" <?php selected($key, $status); ?>><?php echo esc_html($label); ?></option>
-                    <?php endforeach; ?>
-                </select>
+                <!-- Quick ranges -->
                 <select name="age">
                     <option value="0"  <?php selected(0, $age); ?>><?php esc_html_e('All time', 'gt-dcd'); ?></option>
+                    <option value="7"  <?php selected(7, $age); ?>><?php esc_html_e('Last 7 days (1 week)', 'gt-dcd'); ?></option>
+                    <option value="14" <?php selected(14, $age); ?>><?php esc_html_e('Last 14 days (2 weeks)', 'gt-dcd'); ?></option>
                     <option value="30" <?php selected(30, $age); ?>><?php esc_html_e('Last 30 days', 'gt-dcd'); ?></option>
                     <option value="90" <?php selected(90, $age); ?>><?php esc_html_e('Last 90 days', 'gt-dcd'); ?></option>
                     <option value="365"<?php selected(365, $age); ?>><?php esc_html_e('Last year', 'gt-dcd'); ?></option>
                 </select>
+
+                <!-- Custom date range (overrides Age if set) -->
+                <label>
+                    <?php esc_html_e('From', 'gt-dcd'); ?>
+                    <input type="date" name="from" value="<?php echo esc_attr($from); ?>" />
+                </label>
+                <label>
+                    <?php esc_html_e('To', 'gt-dcd'); ?>
+                    <input type="date" name="to" value="<?php echo esc_attr($to); ?>" />
+                </label>
+
                 <input type="text" name="s" value="<?php echo esc_attr($s); ?>" placeholder="<?php esc_attr_e('Search title or slug…', 'gt-dcd'); ?>" />
                 <button class="button"><?php esc_html_e('Filter', 'gt-dcd'); ?></button>
+                <span class="gt-dc-help"><?php esc_html_e('Tip: If you set a custom range, it overrides the quick range.', 'gt-dcd'); ?></span>
             </form>
 
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="gt-dc-table">
@@ -124,7 +127,7 @@ class GT_Duplicate_Cleaner_Dashboard {
                     <button class="button button-secondary" name="action" value="<?php echo esc_attr(self::ACTION_DELETE); ?>" onclick="return confirm('<?php echo esc_js(__('Permanently delete selected posts? This cannot be undone.', 'gt-dcd')); ?>');">
                         <?php esc_html_e('Delete permanently', 'gt-dcd'); ?>
                     </button>
-                    <span class="gt-dc-help"><?php esc_html_e('Tip: Use the header checkbox to select all on this page.', 'gt-dcd'); ?></span>
+                    <span class="gt-dc-help"><?php esc_html_e('Use the header checkbox to select all on this page.', 'gt-dcd'); ?></span>
                 </div>
 
                 <table class="widefat fixed striped ">
@@ -318,7 +321,7 @@ class GT_Duplicate_Cleaner_Dashboard {
     private function build_where($args, $counting=false) {
         global $wpdb;
 
-        $types = $this->get_public_post_types();
+        $types    = $this->get_public_post_types();
         $statuses = ['publish','pending','draft','future','private'];
 
         $wheres = [
@@ -328,9 +331,37 @@ class GT_Duplicate_Cleaner_Dashboard {
         ];
         $params = [];
 
-        if (!empty($args['post_type'])) { $wheres[] = 'p.post_type = %s'; $params[] = $args['post_type']; }
-        if (!empty($args['status']))    { $wheres[] = 'p.post_status = %s'; $params[] = $args['status']; }
-        if (!empty($args['age']))       { $wheres[] = 'p.post_date_gmt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY)'; $params[] = intval($args['age']); }
+        // Custom date range (overrides age)
+        $from = isset($args['from']) ? $args['from'] : '';
+        $to   = isset($args['to'])   ? $args['to']   : '';
+
+        if ($from || $to) {
+            // Convert to UTC datetimes covering full days
+            if ($from) {
+                $from_ts = strtotime($from . ' 00:00:00 UTC');
+                $from_dt = gmdate('Y-m-d H:i:s', $from_ts);
+            }
+            if ($to) {
+                $to_ts = strtotime($to . ' 23:59:59 UTC');
+                $to_dt = gmdate('Y-m-d H:i:s', $to_ts);
+            }
+
+            if (!empty($from) && !empty($to)) {
+                $wheres[] = 'p.post_date_gmt BETWEEN %s AND %s';
+                $params[] = $from_dt;
+                $params[] = $to_dt;
+            } elseif (!empty($from)) {
+                $wheres[] = 'p.post_date_gmt >= %s';
+                $params[] = $from_dt;
+            } elseif (!empty($to)) {
+                $wheres[] = 'p.post_date_gmt <= %s';
+                $params[] = $to_dt;
+            }
+        } elseif (!empty($args['age'])) {
+            $wheres[] = 'p.post_date_gmt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY)';
+            $params[] = intval($args['age']);
+        }
+
         if (!empty($args['search'])) {
             $like = '%' . $wpdb->esc_like($args['search']) . '%';
             $wheres[] = '(p.post_title LIKE %s OR p.post_name LIKE %s)';

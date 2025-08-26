@@ -44,7 +44,6 @@ add_action('admin_init', function(){
     if (!current_user_can('activate_plugins')) return;
     if (!class_exists('GT_No_Numbered_Duplicates_Plugin')) {
         add_action('admin_notices', function(){
-            echo '<div class="notice notice-info is-dismissible"><p><strong>Duplicate Cleaner – Dashboard</strong>: For automatic prevention of new numbered slugs (e.g., <code>-2</code>, <code>-3</code>), keep the <em>Duplicate Cleaner (No Numbered Post URLs)</em> plugin active.</p></div>';
         });
     }
 });
