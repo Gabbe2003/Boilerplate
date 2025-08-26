@@ -30,30 +30,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 ?>
 
-<div id="<?php echo esc_attr( 'ai1wm-modal-dialog-' . $modal ); ?>" class="ai1wm-modal-dialog">
-	<div class="ai1wm-modal-container" role="dialog">
-		<h2><?php esc_html_e( 'Enter your Purchase ID', 'all-in-one-wp-migration' ); ?></h2>
-		<p><?php esc_html_e( 'To update your plugin/extension to the latest version, please fill your Purchase ID below.', 'all-in-one-wp-migration' ); ?></p>
-		<p class="ai1wm-modal-error"></p>
-		<p>
-			<input type="text" class="ai1wm-purchase-id" placeholder="<?php esc_attr_e( 'Purchase ID', 'all-in-one-wp-migration' ); ?>" />
-			<input type="hidden" class="ai1wm-update-link" value="<?php echo esc_url( $url ); ?>" />
-		</p>
-		<p>
-			<?php esc_html_e( "Don't have a Purchase ID? You can find your Purchase ID", 'all-in-one-wp-migration' ); ?>
-			<a href="https://servmask.com/lost-purchase" target="_blank" class="ai1wm-help-link"><?php esc_html_e( 'here', 'all-in-one-wp-migration' ); ?></a>
-		</p>
-		<p class="ai1wm-modal-buttons submitbox">
-			<button type="button" class="ai1wm-purchase-add ai1wm-button-green">
-				<?php esc_html_e( 'Save', 'all-in-one-wp-migration' ); ?>
-			</button>
-			<a href="#" class="submitdelete ai1wm-purchase-discard"><?php esc_html_e( 'Discard', 'all-in-one-wp-migration' ); ?></a>
-		</p>
-	</div>
+<div class="error">
+	<p>
+		<?php
+		echo wp_kses(
+			sprintf(
+				/* translators: File name. */
+				__(
+					'Could not create <strong>%s</strong> file. Please ensure the parent folder has read/write permissions.',
+					'all-in-one-wp-migration'
+				),
+				AI1WM_STORAGE_HTACCESS
+			),
+			ai1wm_allowed_html_tags()
+		)
+		?>
+	</p>
 </div>
-
-<span id="<?php echo esc_attr( 'ai1wm-update-section-' . $modal ); ?>">
-	<i class="ai1wm-icon-update"></i>
-	<?php esc_html_e( 'There is an update available. To update, you must enter your', 'all-in-one-wp-migration' ); ?>
-	<a class="ai1wm-modal-dialog-purchase-id" href="<?php echo esc_attr( '#ai1wm-modal-dialog-' . $modal ); ?>"><?php esc_html_e( 'Purchase ID', 'all-in-one-wp-migration' ); ?></a>.
-</span>

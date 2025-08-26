@@ -1750,17 +1750,22 @@ function ai1wm_chmod( $file, $mode ) {
 /**
  * Copies one file's contents to another
  *
- * @param  string $source_file      File to copy the contents from
- * @param  string $destination_file File to copy the contents to
+ * @param  string  $target_file        File to copy the contents from
+ * @param  string  $output_file        File to copy the contents to
+ * @param  integer $output_file_offset Output file offset bytes
+ * @return void
  */
-function ai1wm_copy( $source_file, $destination_file ) {
-	$source_handle      = ai1wm_open( $source_file, 'rb' );
-	$destination_handle = ai1wm_open( $destination_file, 'ab' );
-	while ( $buffer = ai1wm_read( $source_handle, 4096 ) ) {
-		ai1wm_write( $destination_handle, $buffer );
+function ai1wm_copy( $target_file, $output_file, $output_file_offset = 0 ) {
+	$target_handle = ai1wm_open( $target_file, 'rb' );
+	$output_handle = ai1wm_open( $output_file, 'cb' );
+	if ( ai1wm_seek( $output_handle, $output_file_offset, SEEK_SET ) !== -1 ) {
+		while ( ( $file_buffer = ai1wm_read( $target_handle, 4096 ) ) ) {
+			ai1wm_write( $output_handle, $file_buffer );
+		}
 	}
-	ai1wm_close( $source_handle );
-	ai1wm_close( $destination_handle );
+
+	ai1wm_close( $target_handle );
+	ai1wm_close( $output_handle );
 }
 
 /**
@@ -1775,7 +1780,7 @@ function ai1wm_is_filesize_supported( $file, $php_int_size = PHP_INT_SIZE, $php_
 
 	// Check whether file size is less than 2GB in PHP 32bits
 	if ( $php_int_size === 4 ) {
-		if ( ( $file_handle = @fopen( $file, 'r' ) ) ) {
+		if ( ( $file_handle = @fopen( $file, 'rb' ) ) ) {
 			if ( @fseek( $file_handle, $php_int_max, SEEK_SET ) !== -1 ) {
 				if ( @fgetc( $file_handle ) !== false ) {
 					$size_result = false;
@@ -1799,6 +1804,28 @@ function ai1wm_is_filesize_supported( $file, $php_int_size = PHP_INT_SIZE, $php_
 function ai1wm_is_filename_supported( $file, $extensions = array( 'wpress' ) ) {
 	if ( in_array( pathinfo( $file, PATHINFO_EXTENSION ), $extensions ) ) {
 		return true;
+	}
+
+	return false;
+}
+
+/**
+ * Check whether file data is supported by All-in-One WP Migration
+ *
+ * @param  string  $file Path to file
+ * @return boolean
+ */
+function ai1wm_is_filedata_supported( $file ) {
+	if ( ( $file_handle = @fopen( $file, 'rb' ) ) ) {
+		if ( ( $file_buffer = @fread( $file_handle, 4377 ) ) ) {
+			if ( ( $file_data = @unpack( 'a255filename/a14size/a12mtime/a4096path', $file_buffer ) ) !== false ) {
+				if ( AI1WM_PACKAGE_NAME === trim( $file_data['filename'] ) ) {
+					return true;
+				}
+			}
+		}
+
+		@fclose( $file_handle );
 	}
 
 	return false;
