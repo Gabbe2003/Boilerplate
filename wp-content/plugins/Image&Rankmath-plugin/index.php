@@ -249,8 +249,18 @@ function ypseo_replace_featured_images_daily() {
  * 8. Admin page under Tools → Pixabay Sync
  * ---------------------------------------------------------------- */
 add_action( 'admin_menu', function() {
-    add_submenu_page( 'tools.php', 'Pixabay Sync', 'Pixabay Sync', 'manage_options', 'ypseo-sync', 'ypseo_admin_page' );
+    // Top-level admin menu item (left sidebar)
+    add_menu_page(
+        'Pixabay Sync',           // Page title
+        'Pixabay Sync',           // Menu title
+        'manage_options',         // Capability
+        'ypseo-sync',             // Menu slug
+        'ypseo_admin_page',       // Callback
+        'dashicons-images-alt2',  // Icon (dashicon)
+        65                        // Position (after "Tools", before "Settings" typically)
+    );
 } );
+
 
 function ypseo_admin_page() {
     if ( ! current_user_can( 'manage_options' ) ) {
